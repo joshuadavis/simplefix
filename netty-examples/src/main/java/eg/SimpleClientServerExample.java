@@ -29,11 +29,6 @@ public class SimpleClientServerExample {
     private static final Logger log = getLogger(SimpleClientServerExample.class);
     private static final int PORT = 18080;
 
-    class Message implements Serializable {
-        private String text;
-
-    }
-
     class ServerHandler extends SimpleChannelHandler {
         private final Server server;
 
@@ -52,7 +47,14 @@ public class SimpleClientServerExample {
 
             ChannelBuffer buf = (ChannelBuffer) e.getMessage();
             int readableBytes = buf.readableBytes();
-            log.info("readableBytes=" + readableBytes);
+            if (readableBytes > 0)
+            {
+                log.info("readableBytes=" + readableBytes);
+                byte[] bytes = new byte[readableBytes];
+                buf.getBytes(0,bytes);
+                String s = new String(bytes);
+                log.info("received: >" + s + "<");
+            }
         }
 
         @Override
