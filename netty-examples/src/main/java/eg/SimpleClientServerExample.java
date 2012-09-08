@@ -47,11 +47,10 @@ public class SimpleClientServerExample {
 
             ChannelBuffer buf = (ChannelBuffer) e.getMessage();
             int readableBytes = buf.readableBytes();
-            if (readableBytes > 0)
-            {
+            if (readableBytes > 0) {
                 log.info("readableBytes=" + readableBytes);
                 byte[] bytes = new byte[readableBytes];
-                buf.getBytes(0,bytes);
+                buf.getBytes(0, bytes);
                 String s = new String(bytes);
                 log.info("received: >" + s + "<");
             }
@@ -108,8 +107,6 @@ public class SimpleClientServerExample {
         public void channelOpen(Channel channel) {
             allChannels.add(channel);
         }
-
-
     }
 
     class ClientHandler extends SimpleChannelHandler {
@@ -156,19 +153,20 @@ public class SimpleClientServerExample {
 
         public void stop() {
             log.info("Client disconnecting...");
-            channel.getCloseFuture().awaitUninterruptibly();
+            channel.close().awaitUninterruptibly();
             factory.releaseExternalResources();
         }
 
         public void write(String s) {
-            if (channel.isWritable())
-            {
+            if (channel.isWritable()) {
                 log.info("Client: writing '" + s + "'...");
                 ChannelBuffer buf = ChannelBuffers.dynamicBuffer(s.length());
                 buf.writeBytes(s.getBytes());
-                channel.write(buf);
-            }
-            else
+                ChannelFuture future = channel.write(buf);
+                log.info("Waiting for write to complete...");
+                future.awaitUninterruptibly();
+                log.info("Write complete.");
+            } else
                 log.info("Client: channel not writable.");
         }
     }

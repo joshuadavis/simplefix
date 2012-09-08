@@ -41,5 +41,6 @@
   <component name="SQLPlugin.ProjectConfiguration">
     <queries />
   </component>
+  <component name="WebServicesPlugin" addRequiredLibraries="true" />
 </project>
 
