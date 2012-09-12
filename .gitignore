@@ -4,3 +4,6 @@
 *.jar
 *.war
 *.ear
+
+# ignore generated sources
+core/target/generated-sources/**

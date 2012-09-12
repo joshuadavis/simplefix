@@ -33,6 +33,7 @@
     <option name="LAST_EDITED_TAB_NAME" />
   </component>
   <component name="ProjectResources">
+    <resource url="http://www.simplefix.org/data_dictionary" location="$PROJECT_DIR$/core/src/main/resources/data_dictionary.xsd" />
     <default-html-doctype>http://www.w3.org/1999/xhtml</default-html-doctype>
   </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_1_5" assert-keyword="true" jdk-15="true" project-jdk-name="1.6" project-jdk-type="JavaSDK">
