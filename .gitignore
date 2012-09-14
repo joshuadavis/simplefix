@@ -5,5 +5,5 @@
 *.war
 *.ear
 
-# ignore generated sources
-core/target/generated-sources/**
+# ignore generated sources and other 'target' stuff.
+core/target/**
