@@ -2,6 +2,7 @@ package org.simplefix.dictionary.test;
 
 import com.google.common.collect.Lists;
 import org.junit.Test;
+import org.simplefix.dictionary.DictionaryParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,33 +30,7 @@ public class DataDictionaryParserTest {
     @Test
     public void parseFIX44() throws Exception {
         URL resource = Thread.currentThread().getContextClassLoader().getResource("FIX44.xml");
-        XMLInputFactory f = XMLInputFactory.newInstance();
-        f.setProperty(XMLInputFactory.IS_COALESCING,Boolean.TRUE);
-        InputStream is = resource.openStream();
-        XMLEventReader eventReader = f.createXMLEventReader(is);
-
-        final List<String> parents = Lists.newArrayList();
-
-        while (eventReader.hasNext()) {
-            XMLEvent event = eventReader.nextEvent();
-            switch (event.getEventType()) {
-                case XMLStreamConstants.START_DOCUMENT:
-                    parents.clear();
-                    break;
-                case XMLStreamConstants.END_DOCUMENT:
-                    parents.clear();
-                    break;
-                case XMLStreamConstants.START_ELEMENT:
-                    StartElement startElement = event.asStartElement();
-                    parents.add(startElement.getName().getLocalPart());
-                    log.info("StartElement: parents = " + parents);
-                    break;
-                case XMLStreamConstants.END_ELEMENT:
-                    EndElement endElement = event.asEndElement();
-                    parents.remove(parents.size() - 1);
-                    break;
-            }
-        }
+        DictionaryParser.parseXML(resource);
 /*
         Dictionary dictionary = DictionaryParser.parseXML(resource);
         assertNotNull(dictionary);
