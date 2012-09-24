@@ -100,28 +100,31 @@ public class DictionaryParser {
         public Location getStartLocation() {
             return startElement.getLocation();
         }
-
-        public StartElement getStartElement() {
-            return startElement;
-        }
     }
 
     private static class FieldDefBuilder {
-        private StartElement startElement;
-        private Map<Integer, String> values = Maps.newHashMap();
+        private final int tag;
+        private final String name;
+        private final Map<String, String> values = Maps.newHashMap();
+        private final Dictionary.FieldType type = null;
 
         private FieldDefBuilder(StartElement startElement) {
-            this.startElement = startElement;
+            tag = intAttribute(startElement,"number");
+            name = stringAttribute(startElement,"name");
         }
 
+
         public Dictionary.FieldDef createFieldDef() {
-            int tag = intAttribute(startElement, "number");
-            Dictionary.FieldType type = null;
-            return new Dictionary.FieldDef(
-                    tag,
-                    stringAttribute(startElement, "name"),
-                    type,
-                    values);
+            return new Dictionary.FieldDef(tag,name,type,values);
+        }
+
+        public void addValue(StartElement startElement) {
+            String key = stringAttribute(startElement,"enum");
+            String name = stringAttribute(startElement,"description");
+            if (values.containsKey(key))
+                throw new DictionaryParseException("Duplicate value " + startElement +
+                        " at " + startElement.getLocation());
+            values.put(key,name);
         }
     }
 
@@ -157,13 +160,6 @@ public class DictionaryParser {
         if (FIELD_DEF_PATH.equals(e.getPath())) {
             fieldDef(endElement, e);
         } else if (VALUE_DEF_PATH.equals(e.getPath())) {
-            // Add the value to the current set of values.
-            if (currentField == null)
-                throw new DictionaryParseException("No field definition! at " + endElement.getLocation());
-/*
-            int index = intAttribute(e.getStartElement())
-            currentField.addValue()
-*/
         }
     }
 
@@ -187,6 +183,21 @@ public class DictionaryParser {
         path.add(elem);
         if (FIELD_DEF_PATH.equals(elem.getPath())) {
             currentField = new FieldDefBuilder(startElement);
+        }
+        else if (VALUE_DEF_PATH.equals(elem.getPath())) {
+            valueDef(startElement);
+        }
+    }
+
+    private void valueDef(StartElement startElement) {
+        // Add the value to the current set of values.
+        if (currentField == null)
+            throw new DictionaryParseException("No field definition! at " + startElement.getLocation());
+        try {
+            currentField.addValue(startElement);
+        } catch (Exception e) {
+            throw new DictionaryParseException("Unexpected error " + e.getMessage() + " at "
+                    + startElement.getLocation());
         }
     }
 

@@ -27,9 +27,9 @@ public class Dictionary {
         private final int tag;
         private final String name;
         private final FieldType type;
-        private final Map<Integer,String> values;
+        private final Map<String,String> values;
 
-        public FieldDef(int tag, String name, FieldType type, Map<Integer, String> values) {
+        public FieldDef(int tag, String name, FieldType type, Map<String, String> values) {
             this.tag = tag;
             this.name = name;
             this.type = type;
