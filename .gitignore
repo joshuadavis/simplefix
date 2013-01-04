@@ -7,3 +7,6 @@
 
 # ignore generated sources and other 'target' stuff.
 core/target/**
+
+# ignore IDEA stuff
+.idea/libraries/*
