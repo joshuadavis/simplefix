@@ -1,22 +1,20 @@
 package org.simplefix.dictionary;
 
-import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.sun.istack.internal.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.IOException;
+import javax.xml.stream.*;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.XMLEvent;
 import java.net.URL;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+
+import static org.simplefix.dictionary.StAXHelper.stringAttribute;
 
 /**
  * Parses QFJ data dictionary XML files.
@@ -30,139 +28,255 @@ public class DictionaryParser {
 
     private static final Logger log = LoggerFactory.getLogger(DictionaryParser.class);
 
-    private static final String FIELDS = "fields";
-    private static final String FIELD = "field";
-    private static final String FIX = "fix";
-    private static final String COMPONENT = "component";
-    private static final String COMPONENTS = "components";
-    private static final String MESSAGE = "message";
-    private static final String MESSAGES = "messages";
 
-    static class NamedEntry {
-        private final Element domElement;
+    /**
+     * The current path of elements, up to the document root.
+     */
+    private final List<Elem> path;
+    /**
+     * Builder for the current field definition.
+     */
+    private FieldDefBuilder currentField;
 
-        NamedEntry(Element domElement) {
-            this.domElement = domElement;
-        }
+    private MessageDefBuilder currentMessage;
 
-        String getName() {
-            return domElement.getAttribute("name");
-        }
-    }
+    private final Map<String,MessageDefBuilder> messageTypes;
 
-    static class FieldEntry extends NamedEntry {
-        FieldEntry(Element domElement) {
-            super(domElement);
-        }
-    }
+    private final DictionaryBuilder builder;
 
-    static class ComponentEntry extends NamedEntry {
-        ComponentEntry(Element domElement) {
-            super(domElement);
-        }
-    }
+    private final String documentName;
 
-    static class MessageEntry extends NamedEntry {
-        MessageEntry(Element domElement) {
-            super(domElement);
-        }
-    }
 
-    private static int twoLevel_forEach(Element root, String name1, String name2,
-                                        Function<Element, Boolean> function) {
-        int processed = 0;
-        final NodeList outerList = root.getChildNodes();
-        for (int i = 0; i < outerList.getLength(); i++) {
-            final Element outer = namedElement(outerList, i, name1);
-            if (outer == null)
-                continue;
-            final NodeList innerList = outer.getChildNodes();
-            for (int j = 0; j < innerList.getLength(); j++) {
-                final Element inner = namedElement(innerList, j, name2);
-                if (inner == null)
-                    continue;
-                Boolean flag = function.apply(inner);
-                if (flag != null && flag) processed++;
-            }
-        }
-        return processed;
-    }
-
-    private static Element namedElement(NodeList list, int index, String tagName) {
-        Node n = list.item(index);
-        if (n.getNodeType() == Node.ELEMENT_NODE) {
-            Element e = (Element) n;
-            if (tagName.equals(e.getTagName()))
-                return e;
-        }
-        return null;
+    public DictionaryParser(String documentName) {
+        builder = new DictionaryBuilder();
+        currentField = null;
+        path = Lists.newArrayList();
+        messageTypes = Maps.newHashMap();
+        this.documentName = documentName;
     }
 
     public static Dictionary parseXML(URL url) throws DictionaryParseException {
-        final Document document = domParse(url);
-
-        Element rootElement = document.getDocumentElement();
-        if (!FIX.equals(rootElement.getTagName()))
-            throw new DictionaryParseException("Unexpected root element tag name: '" +
-                    rootElement.getTagName() + "'");
-
-        // Index all the field definitions by name.   Parse the field definitions.
-        final Map<String, FieldEntry> fieldsByName = Maps.newHashMap();
-        int fieldCount = twoLevel_forEach(rootElement, FIELDS, FIELD, new Function<Element, Boolean>() {
-            public Boolean apply(@Nullable Element element) {
-                FieldEntry entry = new FieldEntry(element);
-                String name = entry.getName();
-                if (fieldsByName.containsKey(name))
-                    throw new DictionaryParseException("Duplicate field definition: " + name);
-                fieldsByName.put(name, entry);
-                return true;
-            }
-        });
-        log.info("parseXML() : " + fieldCount + " fields parsed.");
-
-        // Index all the component definitions by name.
-        final Map<String, ComponentEntry> componentsByName = Maps.newHashMap();
-        int componentCount = twoLevel_forEach(rootElement, COMPONENTS, COMPONENT, new Function<Element, Boolean>() {
-            public Boolean apply(@Nullable Element element) {
-                ComponentEntry entry = new ComponentEntry(element);
-                String name = entry.getName();
-                if (componentsByName.containsKey(name))
-                    throw new DictionaryParseException("Duplicate component definition: " + name);
-                componentsByName.put(name, entry);
-                return true;
-            }
-        });
-        log.info("parseXML() : " + componentCount + " components parsed.");
-
-        // Index all the message types by name.
-        final Map<String, MessageEntry> messagesByName = Maps.newHashMap();
-        int messageCount = twoLevel_forEach(rootElement, MESSAGES, MESSAGE, new Function<Element, Boolean>() {
-            public Boolean apply(@Nullable Element element) {
-                MessageEntry entry = new MessageEntry(element);
-                String name = entry.getName();
-                if (messagesByName.containsKey(name))
-                    throw new DictionaryParseException("Duplicate message type definition: " + name);
-                messagesByName.put(name, entry);
-                return true;
-            }
-        });
-        log.info("parseXML() : " + messageCount + " message types parsed.");
-
-        // Parse all the message types link the fields up by name.
-
-        return new Dictionary();
-    }
-
-    private static Document domParse(URL url) {
+        XMLEventReader eventReader = StAXHelper.createXMLEventReader(url);
         try {
-            // Use reg'ler old DOM parsing.
-            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-            return dBuilder.parse(url.toString());
-        } catch (Exception e) {
-            final String msg = "Unable to parse " + url + " due to : " + e;
-            log.error(msg, e);
-            throw new DictionaryParseException(msg, e);
+            return new DictionaryParser(url.toString()).doParse(eventReader);
+        } catch (XMLStreamException e) {
+            throw new DictionaryParseException("Unable to read " + url + " due to " + e, e);
+        } catch (DictionaryParseException dpe) {
+            log.error("Unable to read " + url + " due to " + dpe, dpe);
+            throw dpe;
         }
     }
+
+    private static class Elem {
+        private final StartElement startElement;
+        private final String path;
+
+        private Elem(Elem parent, StartElement startElement) {
+            this.startElement = startElement;
+            String localPart = StAXHelper.elementName(startElement);
+            this.path = (parent == null) ? localPart : parent.getPath() + "/" + localPart;
+        }
+
+        @Override
+        public String toString() {
+            return "Elem{" +
+                    "startElement=" + startElement +
+                    '}';
+        }
+
+        public String getPath() {
+            return path;
+        }
+    }
+
+    private String getErrorLocation(XMLEvent event) {
+        return StAXHelper.getLocationString(documentName, event);
+    }
+
+    private class FieldDefBuilder {
+        private final int tag;
+        private final String name;
+        private final String type;
+        private final Map<String, String> values = Maps.newHashMap();
+        private final ValueType valueType;
+
+        private FieldDefBuilder(StartElement startElement) {
+            tag = StAXHelper.intAttribute(startElement, "number");
+            name = stringAttribute(startElement, "name");
+            type = stringAttribute(startElement, "type");
+            valueType = builder.mapToValueType(type);
+        }
+
+        public FieldDef createFieldDef() {
+            return new FieldDef(tag, name, type, valueType, values);
+        }
+
+        public void addValue(StartElement startElement) {
+            String key = stringAttribute(startElement, "enum");
+            String name = stringAttribute(startElement, "description");
+            if (values.containsKey(key))
+                throw new DictionaryParseException("Duplicate value " + startElement +
+                        getErrorLocation(startElement));
+            values.put(key, name);
+        }
+    }
+
+    private Dictionary doParse(XMLEventReader eventReader) throws XMLStreamException {
+
+        while (eventReader.hasNext()) {
+            XMLEvent event = eventReader.nextEvent();
+            switch (event.getEventType()) {
+                case XMLStreamConstants.START_DOCUMENT:
+                    path.clear();
+                    break;
+                case XMLStreamConstants.END_DOCUMENT:
+                    path.clear();
+                    break;
+                case XMLStreamConstants.START_ELEMENT:
+                    startElement(event);
+                    break;
+                case XMLStreamConstants.END_ELEMENT:
+                    endElement(event);
+                    break;
+            }
+        }
+
+        resolveReferences();
+        // Parse all the message types link the fields up by name.
+        return builder.create();
+    }
+
+    private void resolveReferences() {
+        // Resolve field references in the message types.
+        for (MessageDefBuilder messageDefBuilder : messageTypes.values()) {
+            final LinkedHashMap<String, StartElement> fieldRefs = messageDefBuilder.fieldRefs;
+            LinkedHashMap<Integer,FieldRef> refMap = new LinkedHashMap<Integer, FieldRef>(fieldRefs.size());
+            for (StartElement fieldRef : fieldRefs.values()) {
+                String fieldName = stringAttribute(fieldRef,"name");
+                FieldDef fieldDef = builder.getFieldDef(fieldName);
+                if (fieldDef == null) {
+                    throw new DictionaryParseException("Undefined field '" + fieldName + "' " +
+                            getErrorLocation(fieldRef));
+                }
+                boolean required = StAXHelper.booleanAttribute(fieldRef,"required");
+                FieldRef ref = new FieldRef(fieldDef,required);
+                refMap.put(fieldDef.getTag(),ref);
+            }
+            String msgType = messageDefBuilder.getMsgType();
+            MessageType messageType = new MessageType(msgType, refMap);
+            builder.addMessageType(messageType);
+        }
+    }
+
+    private void endElement(XMLEvent event) {
+        EndElement endElement = event.asEndElement();
+        Elem e = path.remove(path.size() - 1);
+        final String pathString = e.getPath();
+        if (pathString.startsWith("fix/fields")) {
+            if ("fix/fields/field".equals(pathString)) {
+                fieldDef(endElement, e);
+            }
+        } else if (pathString.startsWith("fix/messages")) {
+            if ("fix/messages/message".equals(pathString)) {
+                messageDef(endElement,e);
+            }
+        }
+    }
+
+    private void messageDef(EndElement endElement, Elem e) {
+        if (messageTypes.containsKey(currentMessage.getMsgType())) {
+            throw new DictionaryParseException("Duplicate message type '" + currentMessage.getMsgType() + "' " +
+                    getErrorLocation(e.startElement));
+        }
+        messageTypes.put(currentMessage.getMsgType(), currentMessage);
+    }
+
+    private void fieldDef(EndElement endElement, Elem e) {
+        // We're done with a field definition.
+        if (currentField == null)
+            throw new DictionaryParseException("No field definition! at " + endElement.getLocation());
+        FieldDef fieldDef = currentField.createFieldDef();
+        if (builder.containsFieldName(fieldDef.getName())) {
+            throw new DictionaryParseException("Duplicate field '" + fieldDef.getName() + "' " +
+                    getErrorLocation(e.startElement));
+        }
+        if (builder.containsTag(fieldDef.getTag())) {
+            throw new DictionaryParseException("Duplicate tag '" + fieldDef.getTag() + "' at " +
+                    getErrorLocation(e.startElement));
+        }
+        builder.addFieldDef(fieldDef);
+        currentField = null;
+    }
+
+    private void startElement(XMLEvent event) {
+        StartElement startElement = event.asStartElement();
+        Elem elem = new Elem(
+                path.isEmpty() ? null : getCurrent(path),
+                startElement);
+        path.add(elem);
+        final String pathString = elem.getPath();
+        if (pathString.startsWith("fix/fields")) {
+            if ("fix/fields/field".equals(pathString)) {
+                currentField = new FieldDefBuilder(startElement);
+            } else if ("fix/fields/field/value".equals(pathString)) {
+                valueDef(startElement);
+            }
+        } else if (pathString.startsWith("fix/messages")) {
+            if ("fix/messages/message".equals(pathString)) {
+                currentMessage = new MessageDefBuilder(startElement);
+            } else if ("fix/messages/message/field".equals(pathString)) {
+                fieldRef(currentMessage,startElement);
+            }
+        }
+    }
+
+    private void fieldRef(MessageDefBuilder defBuilder, StartElement fieldRefElement) {
+        if (defBuilder == null) {
+            throw new DictionaryParseException("Field reference is not inside a group! " +
+                    getErrorLocation(fieldRefElement));
+        }
+        defBuilder.addFieldRef(fieldRefElement);
+    }
+
+    private class MessageDefBuilder {
+        private final StartElement startElement;
+        private final LinkedHashMap<String,StartElement> fieldRefs = new LinkedHashMap<String, StartElement>();
+        private final String msgType;
+
+        private MessageDefBuilder(StartElement startElement) {
+            this.startElement = startElement;
+            msgType = stringAttribute(startElement,"msgtype");
+        }
+
+        void addFieldRef(StartElement fieldRef) {
+            String fieldName = stringAttribute(fieldRef, "name");
+            if (fieldRefs.containsKey(fieldName)) {
+                throw new DictionaryParseException("Field '" + fieldName + "' already referenced! "
+                        + getErrorLocation(fieldRef));
+            }
+            // NOTE: This will be resolved later.
+            fieldRefs.put(fieldName, fieldRef);
+        }
+
+        public String getMsgType() {
+            return msgType;
+        }
+    }
+
+    private void valueDef(StartElement startElement) {
+        // Add the value to the current set of values.
+        if (currentField == null)
+            throw new DictionaryParseException("No field definition! " + getErrorLocation(startElement));
+        try {
+            currentField.addValue(startElement);
+        } catch (Exception e) {
+            throw new DictionaryParseException("Unexpected error " +
+                    e.getMessage() + " " + getErrorLocation(startElement));
+        }
+    }
+
+    private static Elem getCurrent(List<Elem> path) {
+        return path.get(path.size() - 1);
+    }
+
 }

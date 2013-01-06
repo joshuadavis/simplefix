@@ -1,19 +1,14 @@
 package org.simplefix.dictionary.test;
 
-import com.google.common.collect.Lists;
 import org.junit.Test;
+import org.simplefix.dictionary.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.stream.XMLEventReader;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.events.EndElement;
-import javax.xml.stream.events.StartElement;
-import javax.xml.stream.events.XMLEvent;
-import java.io.InputStream;
 import java.net.URL;
-import java.util.List;
+
+import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertNotNull;
 
 /**
  * Test the data dictionary parsing code.
@@ -26,39 +21,27 @@ import java.util.List;
 public class DataDictionaryParserTest {
     private static final Logger log = LoggerFactory.getLogger(DataDictionaryParserTest.class);
 
-    @Test
-    public void parseFIX44() throws Exception {
+
+    @Test()
+    public void checkFix44() throws Exception {
         URL resource = Thread.currentThread().getContextClassLoader().getResource("FIX44.xml");
-        XMLInputFactory f = XMLInputFactory.newInstance();
-        f.setProperty(XMLInputFactory.IS_COALESCING,Boolean.TRUE);
-        InputStream is = resource.openStream();
-        XMLEventReader eventReader = f.createXMLEventReader(is);
-
-        final List<String> parents = Lists.newArrayList();
-
-        while (eventReader.hasNext()) {
-            XMLEvent event = eventReader.nextEvent();
-            switch (event.getEventType()) {
-                case XMLStreamConstants.START_DOCUMENT:
-                    parents.clear();
-                    break;
-                case XMLStreamConstants.END_DOCUMENT:
-                    parents.clear();
-                    break;
-                case XMLStreamConstants.START_ELEMENT:
-                    StartElement startElement = event.asStartElement();
-                    parents.add(startElement.getName().getLocalPart());
-                    log.info("StartElement: parents = " + parents);
-                    break;
-                case XMLStreamConstants.END_ELEMENT:
-                    EndElement endElement = event.asEndElement();
-                    parents.remove(parents.size() - 1);
-                    break;
-            }
-        }
-/*
         Dictionary dictionary = DictionaryParser.parseXML(resource);
         assertNotNull(dictionary);
-*/
+        FieldDef fieldDef = dictionary.getFieldDef(1);
+        assertNotNull(fieldDef);
+        FieldDef fieldDef1 = dictionary.getFieldDef("Account");
+        assertNotNull(fieldDef1);
+        assertEquals(fieldDef, fieldDef1);
+
+        MessageType logon = dictionary.getMessageType("A");
+        assertNotNull(logon);
+
+        log.info("Logon=" + logon);
+    }
+
+    @Test(expected = DictionaryParseException.class)
+    public void checkDupField() throws Exception {
+        URL resource = Thread.currentThread().getContextClassLoader().getResource("FIX44-bad1.xml");
+        DictionaryParser.parseXML(resource);
     }
 }
