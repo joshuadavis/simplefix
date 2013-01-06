@@ -7,3 +7,6 @@
 
 # ignore generated sources and other 'target' stuff.
 core/target/**
+
+# IDEA files that are generated from Maven project files
+.idea/libraries/*
