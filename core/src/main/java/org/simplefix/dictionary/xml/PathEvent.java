@@ -37,16 +37,20 @@ public class PathEvent implements XMLEvent {
         path = (parent == null ? "" : parent.getPath() + "/") + name;
     }
 
-    public XMLEvent getDelegate() {
-        return delegate;
-    }
-
     public PathEvent getParent() {
         return parent;
     }
 
     public PathEvent getStart() {
         return start;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public int getEventType() {
@@ -111,14 +115,6 @@ public class PathEvent implements XMLEvent {
 
     public void writeAsEncodedUnicode(Writer writer) throws XMLStreamException {
         delegate.writeAsEncodedUnicode(writer);
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public String getName() {
-        return name;
     }
 
     @Override

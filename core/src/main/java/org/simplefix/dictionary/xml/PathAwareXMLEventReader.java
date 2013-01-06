@@ -23,6 +23,8 @@ public class PathAwareXMLEventReader {
      */
     private final List<PathEvent> path = Lists.newArrayList();
 
+    private int level = 0;
+
     private final XMLEventReader reader;
 
     public boolean hasNext() {
@@ -50,7 +52,8 @@ public class PathAwareXMLEventReader {
     }
 
     private PathEvent endElement(XMLEvent event) {
-        PathEvent start = path.remove(path.size() - 1);
+        level--;
+        PathEvent start = path.remove(level);
         PathEvent parent = getCurrentParent();
         return new PathEvent(parent,event,start);
     }
@@ -61,15 +64,17 @@ public class PathAwareXMLEventReader {
         // Add this start element to the path.
         PathEvent start = new PathEvent(parent,startElement);
         path.add(start);
+        level++;
         return start;
     }
 
     private PathEvent getCurrentParent() {
-        return path.isEmpty() ? null : path.get(path.size() - 1);
+        return level == 0 ? null : path.get(level - 1);
     }
 
     private PathEvent reset(XMLEvent event) {
         path.clear();
+        level = 0;
         return new PathEvent(null,event);
     }
 }
