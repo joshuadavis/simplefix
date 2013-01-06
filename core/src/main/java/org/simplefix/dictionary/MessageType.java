@@ -1,5 +1,6 @@
 package org.simplefix.dictionary;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 
 /**
@@ -10,15 +11,21 @@ import java.util.LinkedHashMap;
  * Time: 10:04 AM
  */
 public class MessageType extends FieldRefGroup {
+    private final boolean applicationMessage;
     private final String msgType;
 
-    public MessageType(String msgType, LinkedHashMap<Integer, FieldRef> fieldRefsByTag) {
+    public MessageType(String msgType, boolean applicationMessage, LinkedHashMap<Integer, FieldRef> fieldRefsByTag) {
         super(fieldRefsByTag);
         this.msgType = msgType;
+        this.applicationMessage = applicationMessage;
     }
 
     public String getMsgType() {
         return msgType;
+    }
+
+    public boolean isApplicationMessage() {
+        return applicationMessage;
     }
 
     @Override

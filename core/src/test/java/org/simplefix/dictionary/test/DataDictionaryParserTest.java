@@ -2,13 +2,13 @@ package org.simplefix.dictionary.test;
 
 import org.junit.Test;
 import org.simplefix.dictionary.*;
+import org.simplefix.dictionary.xml.DictionaryParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URL;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.*;
 
 /**
  * Test the data dictionary parsing code.
@@ -33,15 +33,20 @@ public class DataDictionaryParserTest {
         assertNotNull(fieldDef1);
         assertEquals(fieldDef, fieldDef1);
 
-        MessageType logon = dictionary.getMessageType("A");
-        assertNotNull(logon);
-
-        log.info("Logon=" + logon);
+        MessageType heartbeat = dictionary.getMessageType("0");
+        assertNotNull(heartbeat);
+        assertFalse(heartbeat.isApplicationMessage());
+        assertEquals(1,heartbeat.getNumberOfTags());
+        final FieldRef testReqID = heartbeat.fieldRefs().next();
+        assertEquals(dictionary.getFieldDef(112), testReqID.getFieldDef());
+        assertFalse(testReqID.isRequired());
+        log.info("heartbeat message type=" + heartbeat);
     }
 
     @Test(expected = DictionaryParseException.class)
     public void checkDupField() throws Exception {
         URL resource = Thread.currentThread().getContextClassLoader().getResource("FIX44-bad1.xml");
+        log.info("NOTE: There will be an ERROR level log message here.   PLEASE IGNORE.");
         DictionaryParser.parseXML(resource);
     }
 }

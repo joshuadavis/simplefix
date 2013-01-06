@@ -1,20 +1,19 @@
-package org.simplefix.dictionary;
+package org.simplefix.dictionary.xml;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.simplefix.dictionary.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.stream.*;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.EndElement;
 import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
 import java.net.URL;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-
-import static org.simplefix.dictionary.StAXHelper.stringAttribute;
 
 /**
  * Parses QFJ data dictionary XML files.
@@ -28,69 +27,72 @@ public class DictionaryParser {
 
     private static final Logger log = LoggerFactory.getLogger(DictionaryParser.class);
 
-
-    /**
-     * The current path of elements, up to the document root.
-     */
-    private final List<Elem> path;
     /**
      * Builder for the current field definition.
      */
     private FieldDefBuilder currentField;
 
+    /**
+     * The current message type.
+     */
     private MessageDefBuilder currentMessage;
 
     private final Map<String,MessageDefBuilder> messageTypes;
 
     private final DictionaryBuilder builder;
 
-    private final String documentName;
+    private Map<String, ValueType> readValueTypeMap() {
+        try {
+            Map<String,ValueType> valueTypeMap = Maps.newHashMap();
+            XMLEventReader eventReader = StAXHelper.createXMLEventReaderForResource("org/simplefix/value-types.xml");
+            while (eventReader.hasNext()) {
+                XMLEvent event = eventReader.nextEvent();
+                switch (event.getEventType()) {
+                    case XMLStreamConstants.START_ELEMENT:
+                        StartElement startElement = event.asStartElement();
+                        if ("value-type".equals(startElement.getName().getLocalPart())) {
+                            String type = StAXHelper.stringAttribute(startElement,"type");
+                            ValueType valueType = ValueType.valueOf(
+                                    StAXHelper.stringAttribute(startElement,"valueType"));
+                            valueTypeMap.put(type,valueType);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return valueTypeMap;
+        } catch (XMLStreamException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-
-    public DictionaryParser(String documentName) {
-        builder = new DictionaryBuilder();
+    public DictionaryParser() {
+        builder = new DictionaryBuilder(readValueTypeMap());
         currentField = null;
-        path = Lists.newArrayList();
         messageTypes = Maps.newHashMap();
-        this.documentName = documentName;
     }
 
     public static Dictionary parseXML(URL url) throws DictionaryParseException {
         XMLEventReader eventReader = StAXHelper.createXMLEventReader(url);
         try {
-            return new DictionaryParser(url.toString()).doParse(eventReader);
+            return new DictionaryParser().doParse(eventReader);
         } catch (XMLStreamException e) {
-            throw new DictionaryParseException("Unable to read " + url + " due to " + e, e);
+            throw new DictionaryParseException(parseError(url, e), e);
         } catch (DictionaryParseException dpe) {
-            log.error("Unable to read " + url + " due to " + dpe, dpe);
+            parseError(url, dpe);
             throw dpe;
         }
     }
 
-    private static class Elem {
-        private final StartElement startElement;
-        private final String path;
-
-        private Elem(Elem parent, StartElement startElement) {
-            this.startElement = startElement;
-            String localPart = StAXHelper.elementName(startElement);
-            this.path = (parent == null) ? localPart : parent.getPath() + "/" + localPart;
-        }
-
-        @Override
-        public String toString() {
-            return "Elem{" +
-                    "startElement=" + startElement +
-                    '}';
-        }
-
-        public String getPath() {
-            return path;
-        }
+    private static String parseError(URL url, Throwable e) {
+        final String s = "Unable to parse " + url + " due to " + e;
+        log.error(s, e);
+        return s;
     }
 
     private String getErrorLocation(XMLEvent event) {
-        return StAXHelper.getLocationString(documentName, event);
+        return StAXHelper.getLocationString(event);
     }
 
     private class FieldDefBuilder {
@@ -102,8 +104,8 @@ public class DictionaryParser {
 
         private FieldDefBuilder(StartElement startElement) {
             tag = StAXHelper.intAttribute(startElement, "number");
-            name = stringAttribute(startElement, "name");
-            type = stringAttribute(startElement, "type");
+            name = StAXHelper.stringAttribute(startElement, "name");
+            type = StAXHelper.stringAttribute(startElement, "type");
             valueType = builder.mapToValueType(type);
         }
 
@@ -112,8 +114,8 @@ public class DictionaryParser {
         }
 
         public void addValue(StartElement startElement) {
-            String key = stringAttribute(startElement, "enum");
-            String name = stringAttribute(startElement, "description");
+            String key = StAXHelper.stringAttribute(startElement, "enum");
+            String name = StAXHelper.stringAttribute(startElement, "description");
             if (values.containsKey(key))
                 throw new DictionaryParseException("Duplicate value " + startElement +
                         getErrorLocation(startElement));
@@ -122,16 +124,10 @@ public class DictionaryParser {
     }
 
     private Dictionary doParse(XMLEventReader eventReader) throws XMLStreamException {
-
-        while (eventReader.hasNext()) {
-            XMLEvent event = eventReader.nextEvent();
+        PathAwareXMLEventReader pathReader = new PathAwareXMLEventReader(eventReader);
+        while (pathReader.hasNext()) {
+            PathEvent event = pathReader.nextEvent();
             switch (event.getEventType()) {
-                case XMLStreamConstants.START_DOCUMENT:
-                    path.clear();
-                    break;
-                case XMLStreamConstants.END_DOCUMENT:
-                    path.clear();
-                    break;
                 case XMLStreamConstants.START_ELEMENT:
                     startElement(event);
                     break;
@@ -152,7 +148,7 @@ public class DictionaryParser {
             final LinkedHashMap<String, StartElement> fieldRefs = messageDefBuilder.fieldRefs;
             LinkedHashMap<Integer,FieldRef> refMap = new LinkedHashMap<Integer, FieldRef>(fieldRefs.size());
             for (StartElement fieldRef : fieldRefs.values()) {
-                String fieldName = stringAttribute(fieldRef,"name");
+                String fieldName = StAXHelper.stringAttribute(fieldRef, "name");
                 FieldDef fieldDef = builder.getFieldDef(fieldName);
                 if (fieldDef == null) {
                     throw new DictionaryParseException("Undefined field '" + fieldName + "' " +
@@ -163,58 +159,55 @@ public class DictionaryParser {
                 refMap.put(fieldDef.getTag(),ref);
             }
             String msgType = messageDefBuilder.getMsgType();
-            MessageType messageType = new MessageType(msgType, refMap);
+            boolean applicationMessage = !"admin".equalsIgnoreCase(
+                    StAXHelper.stringAttribute(messageDefBuilder.startElement, "msgcat"));
+            MessageType messageType = new MessageType(msgType, applicationMessage, refMap);
             builder.addMessageType(messageType);
         }
     }
 
-    private void endElement(XMLEvent event) {
+    private void endElement(PathEvent event) {
         EndElement endElement = event.asEndElement();
-        Elem e = path.remove(path.size() - 1);
-        final String pathString = e.getPath();
+        final String pathString = event.getPath();
         if (pathString.startsWith("fix/fields")) {
             if ("fix/fields/field".equals(pathString)) {
-                fieldDef(endElement, e);
+                fieldDef(endElement, event);
             }
         } else if (pathString.startsWith("fix/messages")) {
             if ("fix/messages/message".equals(pathString)) {
-                messageDef(endElement,e);
+                messageDef(event);
             }
         }
     }
 
-    private void messageDef(EndElement endElement, Elem e) {
+    private void messageDef(PathEvent e) {
         if (messageTypes.containsKey(currentMessage.getMsgType())) {
             throw new DictionaryParseException("Duplicate message type '" + currentMessage.getMsgType() + "' " +
-                    getErrorLocation(e.startElement));
+                    getErrorLocation(e.getStart()));
         }
         messageTypes.put(currentMessage.getMsgType(), currentMessage);
     }
 
-    private void fieldDef(EndElement endElement, Elem e) {
+    private void fieldDef(EndElement endElement, PathEvent e) {
         // We're done with a field definition.
         if (currentField == null)
             throw new DictionaryParseException("No field definition! at " + endElement.getLocation());
         FieldDef fieldDef = currentField.createFieldDef();
         if (builder.containsFieldName(fieldDef.getName())) {
             throw new DictionaryParseException("Duplicate field '" + fieldDef.getName() + "' " +
-                    getErrorLocation(e.startElement));
+                    getErrorLocation(e.getStart()));
         }
         if (builder.containsTag(fieldDef.getTag())) {
             throw new DictionaryParseException("Duplicate tag '" + fieldDef.getTag() + "' at " +
-                    getErrorLocation(e.startElement));
+                    getErrorLocation(e.getStart()));
         }
         builder.addFieldDef(fieldDef);
         currentField = null;
     }
 
-    private void startElement(XMLEvent event) {
+    private void startElement(PathEvent event) {
         StartElement startElement = event.asStartElement();
-        Elem elem = new Elem(
-                path.isEmpty() ? null : getCurrent(path),
-                startElement);
-        path.add(elem);
-        final String pathString = elem.getPath();
+        final String pathString = event.getPath();
         if (pathString.startsWith("fix/fields")) {
             if ("fix/fields/field".equals(pathString)) {
                 currentField = new FieldDefBuilder(startElement);
@@ -245,11 +238,11 @@ public class DictionaryParser {
 
         private MessageDefBuilder(StartElement startElement) {
             this.startElement = startElement;
-            msgType = stringAttribute(startElement,"msgtype");
+            msgType = StAXHelper.stringAttribute(startElement, "msgtype");
         }
 
         void addFieldRef(StartElement fieldRef) {
-            String fieldName = stringAttribute(fieldRef, "name");
+            String fieldName = StAXHelper.stringAttribute(fieldRef, "name");
             if (fieldRefs.containsKey(fieldName)) {
                 throw new DictionaryParseException("Field '" + fieldName + "' already referenced! "
                         + getErrorLocation(fieldRef));
@@ -274,9 +267,4 @@ public class DictionaryParser {
                     e.getMessage() + " " + getErrorLocation(startElement));
         }
     }
-
-    private static Elem getCurrent(List<Elem> path) {
-        return path.get(path.size() - 1);
-    }
-
 }

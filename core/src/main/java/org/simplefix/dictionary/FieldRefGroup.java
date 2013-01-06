@@ -1,5 +1,6 @@
 package org.simplefix.dictionary;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 
 /**
@@ -19,5 +20,13 @@ public class FieldRefGroup {
     @Override
     public String toString() {
         return "fieldRefsByTag=" + fieldRefsByTag ;
+    }
+
+    public int getNumberOfTags() {
+        return fieldRefsByTag.size();
+    }
+
+    public Iterator<FieldRef> fieldRefs() {
+        return fieldRefsByTag.values().iterator();
     }
 }

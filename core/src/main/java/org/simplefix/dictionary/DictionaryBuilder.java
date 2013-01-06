@@ -22,36 +22,11 @@ public class DictionaryBuilder {
     private final Map<String, ValueType> valueTypeMap;
     private final Map<String, MessageType> messageTypes;
 
-    public DictionaryBuilder() {
+    public DictionaryBuilder(Map<String,ValueType> valueTypeMap) {
         fieldsByName = Maps.newHashMap();
         fieldsByTag = Maps.newHashMap();
-        valueTypeMap = Maps.newHashMap();
+        this.valueTypeMap = valueTypeMap;
         messageTypes = Maps.newHashMap();
-        readValueTypeMap();
-    }
-
-    private void readValueTypeMap() {
-        try {
-            XMLEventReader eventReader = StAXHelper.createXMLEventReaderForResource("org/simplefix/value-types.xml");
-            while (eventReader.hasNext()) {
-                XMLEvent event = eventReader.nextEvent();
-                switch (event.getEventType()) {
-                    case XMLStreamConstants.START_ELEMENT:
-                        StartElement startElement = event.asStartElement();
-                        if ("value-type".equals(startElement.getName().getLocalPart())) {
-                            String type = StAXHelper.stringAttribute(startElement,"type");
-                            ValueType valueType = ValueType.valueOf(
-                                    StAXHelper.stringAttribute(startElement,"valueType"));
-                            valueTypeMap.put(type,valueType);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-        } catch (XMLStreamException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     public boolean containsFieldName(String name) {

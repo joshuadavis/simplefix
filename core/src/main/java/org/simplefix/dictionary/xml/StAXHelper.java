@@ -1,4 +1,6 @@
-package org.simplefix.dictionary;
+package org.simplefix.dictionary.xml;
+
+import org.simplefix.dictionary.DictionaryParseException;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.Location;
@@ -19,8 +21,8 @@ import java.net.URL;
  * Date: 1/6/13
  * Time: 7:52 AM
  */
-class StAXHelper {
-    static XMLEventReader createXMLEventReader(URL url) {
+public class StAXHelper {
+    public static XMLEventReader createXMLEventReader(URL url) {
         try {
             XMLInputFactory f = XMLInputFactory.newInstance();
             f.setProperty(XMLInputFactory.IS_COALESCING, Boolean.TRUE);
@@ -33,7 +35,7 @@ class StAXHelper {
         }
     }
 
-    static XMLEventReader createXMLEventReaderForResource(String name) {
+    public static XMLEventReader createXMLEventReaderForResource(String name) {
         URL url = Thread.currentThread().getContextClassLoader().getResource(name);
         return createXMLEventReader(url);
     }
@@ -50,7 +52,7 @@ class StAXHelper {
         Attribute attribute = getAttribute(startElement, attributeName);
         if (attribute == null)
             throw new DictionaryParseException("Required attribute '" + attributeName +
-                    "' missing on " + startElement + getLocationString(null, startElement));
+                    "' missing on " + startElement + getLocationString(startElement));
         return attribute;
     }
 
@@ -67,10 +69,9 @@ class StAXHelper {
         return startElement.getName().getLocalPart();
     }
 
-    static String getLocationString(String documentName, XMLEvent event) {
+    static String getLocationString(XMLEvent event) {
         final Location location = event.getLocation();
-        return (documentName != null ? "in " + documentName : "") +
-                " at line " + location.getLineNumber() +
+        return " at line " + location.getLineNumber() +
                 ", column " + location.getColumnNumber();
     }
 
