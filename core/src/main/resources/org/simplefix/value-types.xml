@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<value-types>
+    <value-type type="INT" valueType="INTEGER"/>
+    <value-type type="STRING" valueType="STRING"/>
+    <value-type type="CHAR" valueType="CHARACTER"/>
+    <value-type type="BOOLEAN" valueType="BOOLEAN"/>
+    <value-type type="FLOAT" valueType="DOUBLE"/>
+
+    <value-type type="AMT" valueType="DOUBLE"/>
+    <value-type type="SEQNUM" valueType="INTEGER"/>
+    <value-type type="NUMINGROUP" valueType="INTEGER"/>
+    <value-type type="PRICE" valueType="DOUBLE"/>
+</value-types>

@@ -14,39 +14,44 @@ import java.util.Map;
  */
 public class Dictionary {
     private final Map<String,FieldDef> fieldsByName;
+    private final Map<Integer, FieldDef> fieldsByTag;
+    private final Map<String, MessageType> messageTypes;
 
-    public Dictionary(Map<String, FieldDef> fieldsByName) {
+    /**
+     * Creates the dictionary.
+     * @param fieldsByName Map of fields by their name.  Tags should be unique as well, but that
+     *                     should be checked by the caller.
+     * @param messageTypes Map of message types by their names.
+     */
+    public Dictionary(Map<String, FieldDef> fieldsByName, Map<String, MessageType> messageTypes) {
         this.fieldsByName = Collections.unmodifiableMap(fieldsByName);
+        Map<Integer,FieldDef> byTag = Maps.newHashMapWithExpectedSize(fieldsByName.size());
+        for (FieldDef fieldDef : fieldsByName.values()) {
+            byTag.put(fieldDef.getTag(),fieldDef);
+        }
+        this.fieldsByTag = Collections.unmodifiableMap(byTag);
+        this.messageTypes = Collections.unmodifiableMap(messageTypes);
     }
 
-    public enum FieldType {
-        INT,
+    /**
+     * Returns the field definition by it's tag.
+     * @param tag the tag
+     * @return field definition
+     */
+    public FieldDef getFieldDef(int tag) {
+        return fieldsByTag.get(tag);
     }
 
-    public static class FieldDef {
-        private final int tag;
-        private final String name;
-        private final FieldType type;
-        private final Map<String,String> values;
-
-        public FieldDef(int tag, String name, FieldType type, Map<String, String> values) {
-            this.tag = tag;
-            this.name = name;
-            this.type = type;
-            this.values = values != null ? Collections.unmodifiableMap(values) : null;
-        }
-
-        public int getTag() {
-            return tag;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public FieldType getType() {
-            return type;
-        }
+    /**
+     * Returns the field definition by it's name.
+     * @param name the name
+     * @return field definition
+     */
+    public FieldDef getFieldDef(String name) {
+        return fieldsByName.get(name);
     }
 
+    public MessageType getMessageType(String msgType) {
+        return messageTypes.get(msgType);
+    }
 }
