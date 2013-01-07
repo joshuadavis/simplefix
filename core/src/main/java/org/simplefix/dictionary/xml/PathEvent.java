@@ -22,6 +22,7 @@ public class PathEvent implements XMLEvent {
     private final PathEvent start;
     private final String name;
     private final String path;
+    private Object context;
 
     public PathEvent(PathEvent parent, XMLEvent delegate) {
         this(parent,delegate,null);
@@ -117,6 +118,18 @@ public class PathEvent implements XMLEvent {
         delegate.writeAsEncodedUnicode(writer);
     }
 
+    public void setContext(Object context) {
+        this.context = context;
+    }
+
+    public Object getContext() {
+        return context;
+    }
+
+    public <T> T getContextAs(Class<? extends T> clazz) {
+        return clazz.cast(getContext());
+    }
+
     @Override
     public String toString() {
         return "PathEvent{" +
@@ -124,6 +137,7 @@ public class PathEvent implements XMLEvent {
                 ", delegate=" + delegate +
                 ", parent=" + parent +
                 ", start=" + start +
+                ", context=" + context +
                 '}';
     }
 }

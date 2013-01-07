@@ -35,15 +35,15 @@ public class DictionaryParser {
     /**
      * The current message type.
      */
-    private MessageDefBuilder currentMessage;
+    private MessageTypeBuilder currentMessage;
 
-    private final Map<String,MessageDefBuilder> messageTypes;
+    private final Map<String, MessageTypeBuilder> messageTypes;
 
     private final DictionaryBuilder builder;
 
     private Map<String, ValueType> readValueTypeMap() {
         try {
-            Map<String,ValueType> valueTypeMap = Maps.newHashMap();
+            Map<String, ValueType> valueTypeMap = Maps.newHashMap();
             XMLEventReader eventReader = StAXHelper.createXMLEventReaderForResource("org/simplefix/value-types.xml");
             while (eventReader.hasNext()) {
                 XMLEvent event = eventReader.nextEvent();
@@ -51,10 +51,10 @@ public class DictionaryParser {
                     case XMLStreamConstants.START_ELEMENT:
                         StartElement startElement = event.asStartElement();
                         if ("value-type".equals(startElement.getName().getLocalPart())) {
-                            String type = StAXHelper.stringAttribute(startElement,"type");
+                            String type = StAXHelper.stringAttribute(startElement, "type");
                             ValueType valueType = ValueType.valueOf(
-                                    StAXHelper.stringAttribute(startElement,"valueType"));
-                            valueTypeMap.put(type,valueType);
+                                    StAXHelper.stringAttribute(startElement, "valueType"));
+                            valueTypeMap.put(type, valueType);
                         }
                         break;
                     default:
@@ -142,11 +142,86 @@ public class DictionaryParser {
         return builder.create();
     }
 
+    private Section section;
+
+    private void startElement(PathEvent event) {
+        final String pathString = event.getPath();
+        if (section == null)
+            section = Section.getSection(pathString);
+        else {
+            switch (section) {
+                case FIELDS:
+                    fieldsStartElement(event);
+                    break;
+                case MESSAGES:
+                    messagesStartElement(event);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private void endElement(PathEvent event) {
+        final String pathString = event.getPath();
+        if (section != null) {
+            switch (section) {
+                case FIELDS:
+                    fieldsEndElement(event);
+                    break;
+                case MESSAGES:
+                    messagesEndElement(event);
+                    break;
+                default:
+                    break;
+            }
+            if (section.getPath().equals(pathString))
+                section = null;
+        }
+    }
+
+
+    private void fieldsStartElement(PathEvent event) {
+        StartElement startElement = event.asStartElement();
+        final String pathString = event.getPath();
+        if ("fix/fields/field".equals(pathString)) {
+            currentField = new FieldDefBuilder(startElement);
+        } else if ("fix/fields/field/value".equals(pathString)) {
+            valueDef(startElement);
+        }
+    }
+
+    private void fieldsEndElement(PathEvent event) {
+        EndElement endElement = event.asEndElement();
+        final String pathString = event.getPath();
+        if ("fix/fields/field".equals(pathString)) {
+            fieldDef(endElement, event);
+        }
+    }
+
+    private void messagesStartElement(PathEvent event) {
+        StartElement startElement = event.asStartElement();
+        final String pathString = event.getPath();
+        if ("fix/messages/message".equals(pathString)) {
+            currentMessage = new MessageTypeBuilder(startElement);
+        } else if ("fix/messages/message/field".equals(pathString)) {
+            fieldRef(currentMessage, startElement);
+        }
+    }
+
+    private void messagesEndElement(PathEvent event) {
+        final String pathString = event.getPath();
+        if ("fix/messages/message".equals(pathString)) {
+            messageDef(event);
+        }
+    }
+
+
     private void resolveReferences() {
         // Resolve field references in the message types.
-        for (MessageDefBuilder messageDefBuilder : messageTypes.values()) {
-            final LinkedHashMap<String, StartElement> fieldRefs = messageDefBuilder.fieldRefs;
-            LinkedHashMap<Integer,FieldRef> refMap = new LinkedHashMap<Integer, FieldRef>(fieldRefs.size());
+        for (MessageTypeBuilder messageTypeBuilder : messageTypes.values()) {
+            final LinkedHashMap<String, StartElement> fieldRefs = messageTypeBuilder.fieldRefs;
+            LinkedHashMap<Integer, FieldRef> refMap = new LinkedHashMap<Integer, FieldRef>(fieldRefs.size());
             for (StartElement fieldRef : fieldRefs.values()) {
                 String fieldName = StAXHelper.stringAttribute(fieldRef, "name");
                 FieldDef fieldDef = builder.getFieldDef(fieldName);
@@ -154,29 +229,15 @@ public class DictionaryParser {
                     throw new DictionaryParseException("Undefined field '" + fieldName + "' " +
                             getErrorLocation(fieldRef));
                 }
-                boolean required = StAXHelper.booleanAttribute(fieldRef,"required");
-                FieldRef ref = new FieldRef(fieldDef,required);
-                refMap.put(fieldDef.getTag(),ref);
+                boolean required = StAXHelper.booleanAttribute(fieldRef, "required");
+                FieldRef ref = new FieldRef(fieldDef, required);
+                refMap.put(fieldDef.getTag(), ref);
             }
-            String msgType = messageDefBuilder.getMsgType();
+            String msgType = messageTypeBuilder.getMsgType();
             boolean applicationMessage = !"admin".equalsIgnoreCase(
-                    StAXHelper.stringAttribute(messageDefBuilder.startElement, "msgcat"));
+                    StAXHelper.stringAttribute(messageTypeBuilder.startElement, "msgcat"));
             MessageType messageType = new MessageType(msgType, applicationMessage, refMap);
             builder.addMessageType(messageType);
-        }
-    }
-
-    private void endElement(PathEvent event) {
-        EndElement endElement = event.asEndElement();
-        final String pathString = event.getPath();
-        if (pathString.startsWith("fix/fields")) {
-            if ("fix/fields/field".equals(pathString)) {
-                fieldDef(endElement, event);
-            }
-        } else if (pathString.startsWith("fix/messages")) {
-            if ("fix/messages/message".equals(pathString)) {
-                messageDef(event);
-            }
         }
     }
 
@@ -205,25 +266,7 @@ public class DictionaryParser {
         currentField = null;
     }
 
-    private void startElement(PathEvent event) {
-        StartElement startElement = event.asStartElement();
-        final String pathString = event.getPath();
-        if (pathString.startsWith("fix/fields")) {
-            if ("fix/fields/field".equals(pathString)) {
-                currentField = new FieldDefBuilder(startElement);
-            } else if ("fix/fields/field/value".equals(pathString)) {
-                valueDef(startElement);
-            }
-        } else if (pathString.startsWith("fix/messages")) {
-            if ("fix/messages/message".equals(pathString)) {
-                currentMessage = new MessageDefBuilder(startElement);
-            } else if ("fix/messages/message/field".equals(pathString)) {
-                fieldRef(currentMessage,startElement);
-            }
-        }
-    }
-
-    private void fieldRef(MessageDefBuilder defBuilder, StartElement fieldRefElement) {
+    private void fieldRef(MessageTypeBuilder defBuilder, StartElement fieldRefElement) {
         if (defBuilder == null) {
             throw new DictionaryParseException("Field reference is not inside a group! " +
                     getErrorLocation(fieldRefElement));
@@ -231,12 +274,12 @@ public class DictionaryParser {
         defBuilder.addFieldRef(fieldRefElement);
     }
 
-    private class MessageDefBuilder {
+    private class MessageTypeBuilder {
         private final StartElement startElement;
-        private final LinkedHashMap<String,StartElement> fieldRefs = new LinkedHashMap<String, StartElement>();
+        private final LinkedHashMap<String, StartElement> fieldRefs = new LinkedHashMap<String, StartElement>();
         private final String msgType;
 
-        private MessageDefBuilder(StartElement startElement) {
+        private MessageTypeBuilder(StartElement startElement) {
             this.startElement = startElement;
             msgType = StAXHelper.stringAttribute(startElement, "msgtype");
         }

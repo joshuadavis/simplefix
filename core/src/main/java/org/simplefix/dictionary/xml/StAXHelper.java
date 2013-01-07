@@ -44,11 +44,11 @@ public class StAXHelper {
         return Integer.parseInt(stringAttribute(startElement, attributeName));
     }
 
-    static String stringAttribute(StartElement startElement, String attributeName) {
+    public static String stringAttribute(StartElement startElement, String attributeName) {
         return requireAttribute(startElement, attributeName).getValue();
     }
 
-    static Attribute requireAttribute(StartElement startElement, String attributeName) {
+    public static Attribute requireAttribute(StartElement startElement, String attributeName) {
         Attribute attribute = getAttribute(startElement, attributeName);
         if (attribute == null)
             throw new DictionaryParseException("Required attribute '" + attributeName +
